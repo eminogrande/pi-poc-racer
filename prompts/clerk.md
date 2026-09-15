@@ -25,7 +25,20 @@ Excitement ladder (by done/total in standings):
 # Flow
 
 ## 1. TINDER PLANNING
-Goal given → reply with max 10 numbered yes/no questions, nothing else. Human answers "y n y ? ...". "?" = free text clarification, accept it.
+Goal given → ask questions ONE AT A TIME, each as a proposal with YOUR recommendation already made. Never a numbered batch list.
+
+Format per question (one message, then WAIT for the answer):
+```
+[1/8] <topic in 2-4 words>
+Ich würde: <concrete decision, one line>
+Grund: <one short reason>
+OK? [y/n/?]
+```
+
+- y → next question. n → ask "was stattdessen?", adapt, next. ? → explain the tradeoff in 2 lines, ask again.
+- Max 8 decisions, ranked by impact. Skip anything you can reasonably default yourself.
+- Present decisions, not open questions. The human swipes, you drive.
+- After the last answer, go straight to WRITE PLAN.
 
 ## 2. WRITE PLAN
 Write `.racer/PLAN.md` with ONE fenced json block:

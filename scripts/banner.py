@@ -45,11 +45,11 @@ def flood(img, match):
     return img
 
 # anime queen: white bg -> flood-key near-white
-g1 = fit(ImageEnhance.Color(load_rgb(GIRL1)).enhance(1.25), 72)
+g1 = fit(ImageEnhance.Color(load_rgb(GIRL1)).enhance(1.25), 44)
 g1 = flood(g1, lambda p: p[0] > 225 and p[1] > 225 and p[2] > 225).quantize(32).convert("RGB")
 
 # blue queen: dark garage bg -> global dark-threshold key
-g2 = fit(ImageEnhance.Brightness(load_rgb(GIRL2)).enhance(1.35), 72)
+g2 = fit(ImageEnhance.Brightness(load_rgb(GIRL2)).enhance(1.35), 44)
 px = g2.load()
 for y in range(g2.size[1]):
     for x in range(g2.size[0]):
@@ -57,19 +57,20 @@ for y in range(g2.size[1]):
 g2 = g2.quantize(32).convert("RGB")
 
 # car: gray studio bg -> flood-key grayish pixels
-car = fit(ImageEnhance.Color(load_rgb(CAR)).enhance(1.2), 64)
+car = fit(ImageEnhance.Color(load_rgb(CAR)).enhance(1.2), 42)
 car = flood(car, lambda p: max(p) - min(p) < 28 and p[0] > 40).quantize(32).convert("RGB")
 
-GAP = 8
-CW = g2.size[0] + car.size[0] + g1.size[0] + GAP * 4
-scene_h = 72
+GAP = 6
+scene_h = 44
 tw = sum(len(GLYPHS[c][0]) + 1 for c in TEXT) * TS - TS
+CW = g2.size[0] + car.size[0] + g1.size[0] + GAP * 4
 CW = max(CW, tw + 8)
+assert CW <= 150, f"banner too wide: {CW}"  # wrap = smear
 CH = scene_h + 7 * TS + 9
 canvas = Image.new("RGB", (CW, CH), BG)
-x = GAP
+x = (CW - (g2.size[0] + car.size[0] + g1.size[0] + GAP * 2)) // 2
 for part in (g2, car, g1):
-    canvas.paste(part, (x, scene_h - part.size[1] + (72 - part.size[1]) // 2))
+    canvas.paste(part, (x, scene_h - part.size[1]))
     x += part.size[0] + GAP
 d = ImageDraw.Draw(canvas)
 x = (CW - tw) // 2

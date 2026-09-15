@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""POC RACER banner: pixel logotype only, two-tone, ANSI half-blocks + preview."""
-from PIL import Image, ImageDraw
+"""POC RACER banner: pixelated anime race queen centered above pixel logotype -> ANSI + preview."""
+from PIL import Image, ImageEnhance, ImageDraw
 
+SRC = "/var/folders/_q/02r_1y0n34960z0ghmm0kbvh0000gn/T/pi-clipboard-4d1de244-527b-4f0d-8f0a-14a4bb22ec42.png"
 OUT_ANSI, OUT_PNG = "themes/banner.ansi", "themes/banner-preview.png"
 
 GLYPHS = {
@@ -16,19 +17,43 @@ GLYPHS = {
 TEXT, TS = "POC RACER", 2
 TOP, BOT, BG = (255, 30, 60), (163, 18, 43), (16, 16, 22)
 
+img = Image.open(SRC)
+if "A" in img.getbands():
+    bg = Image.new("RGBA", img.size, (255, 255, 255, 255))
+    img = Image.alpha_composite(bg, img.convert("RGBA"))
+img = img.convert("RGB")
+pw, ph = img.size
+gh = 72  # girl height in px (= 36 rows)
+gw = int(gh * pw / ph)
+girl = img.resize((gw, gh), Image.LANCZOS)
+girl = ImageEnhance.Color(girl).enhance(1.25)
+# flood-key white background from borders -> BG (keeps white suit interior)
+px = girl.load()
+seen, stack = set(), [(x, y) for x in range(gw) for y in (0, gh-1)] + [(x, y) for y in range(gh) for x in (0, gw-1)]
+while stack:
+    x, y = stack.pop()
+    if (x, y) in seen or not (0 <= x < gw and 0 <= y < gh): continue
+    seen.add((x, y))
+    r, g, b = px[x, y]
+    if r > 225 and g > 225 and b > 225:
+        px[x, y] = BG
+        stack += [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
+girl = girl.quantize(32).convert("RGB")
+
 tw = sum(len(GLYPHS[c][0]) + 1 for c in TEXT) * TS - TS
-th = 7 * TS
-CW = tw + 8
-canvas = Image.new("RGB", (CW, th + 6), BG)
+CW = max(tw + 8, gw + 8)
+CH = gh + 7 * TS + 9
+canvas = Image.new("RGB", (CW, CH), BG)
+canvas.paste(girl, ((CW - gw) // 2, 2))
 d = ImageDraw.Draw(canvas)
-x = 4
+x = (CW - tw) // 2
 for c in TEXT:
     g = GLYPHS[c]
     for ry, row in enumerate(g):
         col = TOP if ry < 4 else BOT
         for rx, v in enumerate(row):
             if v == "1":
-                d.rectangle([x + rx*TS, 3 + ry*TS, x + rx*TS + TS - 1, 3 + ry*TS + TS - 1], fill=col)
+                d.rectangle([x + rx*TS, gh + 5 + ry*TS, x + rx*TS + TS - 1, gh + 5 + ry*TS + TS - 1], fill=col)
     x += (len(g[0]) + 1) * TS
 
 cw, chh = canvas.size

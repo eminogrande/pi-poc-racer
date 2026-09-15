@@ -14,13 +14,15 @@ mkdirSync(join(STATE, "logs"), { recursive: true });
 
 const TOKEN_CEILING = +(process.env.POC_TOKEN_CEILING || 100_000);
 const SILENCE_MS = +(process.env.POC_SILENCE_MS || 180_000);
+const PI_MODEL = process.env.POC_PI_MODEL || "kimi-coding/k3";
+const WORKER_THINKING = process.env.POC_WORKER_THINKING || "low";
 
 const git = (...a) => { try { return execFileSync("git", a, { cwd: CWD, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return ""; } };
 const inGit = () => git("rev-parse", "--is-inside-work-tree") === "true";
 const commit = msg => { if (inGit() && git("status", "--porcelain")) { git("add", "-A"); git("commit", "-qm", msg); } };
 
 const sh = (args, input) => new Promise((res, rej) => {
-  const p = spawn("pi", ["-p", "--provider", "kimi-coding", "--model", "k3", ...args], { cwd: CWD });
+  const p = spawn("pi", ["-p", "--model", PI_MODEL, ...args], { cwd: CWD });
   let out = "";
   p.stdout.on("data", d => (out += d));
   p.on("close", c => (c === 0 ? res(out) : rej(new Error(`pi exited ${c}: ${out.slice(-300)}`))));
@@ -82,7 +84,7 @@ const writeStandings = tasks => writeFileSync(join(STATE, "standings.json"),
 
 function runWorker(task) {
   return new Promise(resolve => {
-    const args = ["-p", "--mode", "json", "--no-skills", "--no-extensions", "--no-context-files", "--",
+    const args = ["-p", "--mode", "json", "--model", `${PI_MODEL}:${WORKER_THINKING}`, "--no-skills", "--no-extensions", "--no-context-files", "--",
       `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. Smallest change that works, delete over add, no new abstractions, no new dependencies. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.`];
     const child = spawn("pi", args, { cwd: CWD });
     const m = meter(child, task);

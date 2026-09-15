@@ -4,6 +4,7 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -f .pi/settings.json ] || { mkdir -p .pi && printf '{ "quietStartup": true }\n' > .pi/settings.json; }
 exec pi \
+  --model "${POC_CLERK_MODEL:-kimi-coding/k3:max}" \
   --no-skills --no-extensions --no-context-files --no-prompt-templates --no-themes \
   --theme "$DIR/themes/racer.json" \
   --use-theme racer \

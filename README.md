@@ -65,6 +65,9 @@ State lives in `.racer/` of the project you run it in:
 |---|---|---|
 | `POC_TOKEN_CEILING` | `100000` | kill a worker past this many total tokens |
 | `POC_SILENCE_MS` | `180000` | kill a worker silent this long |
+| `POC_PI_MODEL` | `kimi-coding/k3` | model for workers + planner calls |
+| `POC_WORKER_THINKING` | `low` | thinking level for workers (`off`/`minimal`/`low`/`medium`/`high`) |
+| `POC_CLERK_MODEL` | `kimi-coding/k3:max` | model + thinking for the Clerk TUI |
 
 ## Clean-room TUI
 

@@ -2,7 +2,7 @@
 // pi-poc-racer — race-to-PoC orchestrator. General plans with you (tinder y/n),
 // then spawns pi workers, kills over-budget ones, splits, redispatches. YOLO.
 import { spawn, execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,9 +18,28 @@ const PI_MODEL = process.env.POC_PI_MODEL || "kimi-coding/k3";
 const WORKER_THINKING = process.env.POC_WORKER_THINKING || "low";
 
 const git = (...a) => { try { return execFileSync("git", a, { cwd: CWD, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return ""; } };
-const gitTry = (...a) => { try { return { ok: true, out: execFileSync("git", a, { cwd: CWD }).toString().trim() }; } catch (e) { return { ok: false, out: (e.stderr || "").toString().trim() }; } };
+const gitTry = (...a) => { try { return { ok: true, out: execFileSync("git", a, { cwd: CWD, stdio: ["ignore", "pipe", "pipe"] }).toString().trim() }; } catch (e) { return { ok: false, out: ((e.stderr || e.stdout || "").toString().trim()) || e.message }; } };
 const inGit = () => git("rev-parse", "--is-inside-work-tree") === "true";
-const commit = msg => { if (inGit() && git("status", "--porcelain")) { git("add", "-A", "--", ".", ":!.racer"); git("commit", "-qm", msg); } };
+const MAX_BLOB = 50 * 1024 * 1024; // GitHub warns >50MB, rejects >100MB (GH001)
+// Stage ONLY the task's own files — never `add -A`: a stray 110MB .fig once rode
+// along and GH001 rejected the whole push. Size guard catches worker-made blobs.
+const commit = (msg, files = []) => {
+  if (!inGit()) return;
+  const targets = files.filter(f => existsSync(join(CWD, f)));
+  if (!targets.length) return console.log(`⚠️ commit skipped, no files on disk: ${msg}`);
+  git("add", "--", ...targets);
+  for (const f of git("diff", "--cached", "--name-only").split("\n").filter(Boolean)) {
+    try {
+      if (statSync(join(CWD, f)).size > MAX_BLOB) {
+        git("reset", "-q", "--", f);
+        console.log(`💥 ${f} is ${(statSync(join(CWD, f)).size / 1e6) | 0}MB (>50MB) — UNSTAGED. Put it in .gitignore, it must never ride along.`);
+      }
+    } catch { /* vanished between add and stat */ }
+  }
+  if (gitTry("diff", "--cached", "--quiet").ok) return console.log(`⚠️ commit skipped, no changes: ${msg}`);
+  const c = gitTry("commit", "-qm", msg);
+  console.log(c.ok ? `   📦 committed: ${msg}` : `💥 commit FAILED (${msg}): ${c.out.slice(-200)}`);
+};
 const deliver = () => {
   if (!inGit() || !git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")) return console.log("no upstream — nothing pushed.");
   if (gitTry("push", "-q").ok) return console.log("pushed to origin.");
@@ -75,7 +94,15 @@ function meter(child, task) {
     const s = d.toString();
     tail = (tail + s).slice(-800);
     task.tokens = tokens;
-    task.last = tail.replace(/\s+/g, " ").slice(-120);
+    for (const line of s.split("\n")) {
+      if (!line.startsWith("{")) continue;
+      try {
+        const e = JSON.parse(line);
+        const txt = e.assistantMessageEvent?.content || e.message?.content?.find?.(c => c.type === "text")?.text;
+        if (txt) task.last = txt.replace(/\s+/g, " ").slice(-120);
+      } catch {}
+    }
+    if (!task.last) task.last = tail.replace(/\s+/g, " ").slice(-120);
     for (const m of s.matchAll(/"totalTokens":(\d+)|"total_tokens":(\d+)/g))
       tokens = Math.max(tokens, +(m[1] || m[2]));
   });
@@ -83,6 +110,22 @@ function meter(child, task) {
 }
 
 const raceStart = Date.now();
+const STEER = join(STATE, "STEER.md");
+const settled = s => s === "done" || s === "dropped";
+function consumeSteer(tasks, state) {
+  let lines = "";
+  try { lines = readFileSync(STEER, "utf8"); writeFileSync(STEER, ""); } catch { return; }
+  for (const line of lines.split("\n").map(l => l.trim()).filter(Boolean)) {
+    console.log(`📥 steer: ${line}`);
+    const [cmd, id, ...rest] = line.split(" ");
+    const t = tasks.get(id);
+    if (cmd === "kill" && t) t.steerKill = true;
+    else if (cmd === "drop" && t) { t.steerKill = true; t.status = "dropped"; t.endedAt = Date.now(); }
+    else if (cmd === "note" && t) t.steerNote = [t.steerNote, rest.join(" ")].filter(Boolean).join(" | ");
+    else if (cmd === "pause") state.paused = true;
+    else if (cmd === "resume") state.paused = false;
+  }
+}
 const writeStandings = tasks => writeFileSync(join(STATE, "standings.json"),
   JSON.stringify({ raceElapsedSec: ((Date.now() - raceStart) / 1000) | 0,
     done: [...tasks.values()].filter(t => t.status === "done").length,
@@ -94,13 +137,14 @@ const writeStandings = tasks => writeFileSync(join(STATE, "standings.json"),
 function runWorker(task) {
   return new Promise(resolve => {
     const args = ["-p", "--mode", "json", "--model", `${PI_MODEL}:${WORKER_THINKING}`, "--no-skills", "--no-extensions", "--no-context-files", "--",
-      `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. Smallest change that works, delete over add, no new abstractions, no new dependencies. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.`];
+      `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. Smallest change that works, delete over add, no new abstractions, no new dependencies. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.${task.steerNote ? `\nTEAM ORDER FROM PIT WALL (follow!): ${task.steerNote}` : ""}`];
     const child = spawn("pi", args, { cwd: CWD });
     child.stdin.end(); // close stdin: pi waits for EOF before starting — open pipe = worker hangs silent
     const m = meter(child, task);
     const log = join(STATE, "logs", `${task.id}.jsonl`);
     child.stdout.on("data", d => appendFileSync(log, d));
     const tick = setInterval(() => {
+      if (task.steerKill) return kill("steered");
       if (m.tokens() > TOKEN_CEILING) return kill("token-ceiling");
       if (m.silentFor() > SILENCE_MS) return kill("silence-timeout");
     }, 5000);
@@ -114,14 +158,18 @@ async function race() {
   const plan = jsonBlock(readFileSync(join(STATE, "PLAN.md"), "utf8"));
   const tasks = new Map(plan.tasks.map(t => [t.id, { ...t, status: "pending" }]));
   const running = new Set();
+  const state = { paused: false };
   while ([...tasks.values()].some(t => t.status === "pending" || t.status === "running")) {
+    consumeSteer(tasks, state);
     for (const t of tasks.values()) {
+      if (state.paused) break;
       if (t.status !== "pending" || running.size >= (plan.maxParallel || 3)) continue;
-      if (t.dependsOn?.some(d => tasks.get(d)?.status !== "done")) continue;
+      if (t.dependsOn?.some(d => !settled(tasks.get(d)?.status))) continue;
       t.status = "running"; running.add(t.id); t.startedAt = Date.now(); writeStandings(tasks);
       runWorker(t).then(async r => {
         running.delete(t.id);
-        if (r.ok) { t.status = "done"; t.endedAt = Date.now(); commit(`racer(${t.id}): ${t.title}`); console.log(`✅ ${t.id} done`); writeStandings(tasks); return; }
+        if (r.ok) { t.status = "done"; t.endedAt = Date.now(); commit(`racer(${t.id}): ${t.title}`, t.files); console.log(`✅ ${t.id} done`); writeStandings(tasks); return; }
+        if (t.status === "dropped") { console.log(`🗑️ ${t.id} dropped by steer`); writeStandings(tasks); return; }
         incident(t, r.reason, r.tail.slice(-200).replace(/\n/g, " "));
         const split = jsonBlock(await prompt("split.md",
           `TASK: ${JSON.stringify(t)}\nREASON: ${r.reason}\nLAST OUTPUT: ${r.tail.slice(-500)}`));

@@ -59,6 +59,19 @@ State lives in `.racer/` of the project you run it in:
 | `.racer/INCIDENTS.md` | kill log + lesson per kill |
 | `.racer/logs/<task>.jsonl` | raw worker output |
 
+## Steering mid-race
+
+Write commands to `.racer/STEER.md` anytime (the Clerk does this when you type `steer …` in the TUI). The race loop consumes them every few seconds:
+
+| command | effect |
+|---|---|
+| `kill t3` | kill worker, split task smaller, redispatch |
+| `drop t3` | kill/cancel task, no replacement |
+| `note t3 use radio not dropdown` | team order, reaches (re)spawned worker prompt |
+| `pause` / `resume` | stop/start new dispatches (running cars finish) |
+
+The Clerk never polls and never blocks: every message you type is answered in ≤2 lines from `.racer/race.log`.
+
 ## Knobs (env vars)
 
 | var | default | meaning |

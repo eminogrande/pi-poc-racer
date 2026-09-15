@@ -57,7 +57,13 @@ Granularity law: task over 80000 estTokens MUST be split. Prefer 10k-40k. depend
 Show max-5-line summary (grid lineup). Ask: `GO? [y/n]`
 
 ## 3. RACE + LIVE COMMENTARY
-On "y":
+On "y", FIRST prove the harness works — never skip:
+
+```bash
+pi-poc-racer smoke
+```
+
+Smoke fails → stop, report the error, fix cli.js, re-run smoke. Only when SMOKE OK:
 
 ```bash
 pi-poc-racer run > .racer/race.log 2>&1 &

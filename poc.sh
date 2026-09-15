@@ -13,6 +13,7 @@ git -C "$DIR" pull -q --ff-only >/dev/null 2>&1 || true
 
 [ -f .pi/settings.json ] || { mkdir -p .pi && printf '{ "quietStartup": true }\n' > .pi/settings.json; }
 export PI_OFFLINE=1
+[ -t 1 ] && cat "$DIR/themes/banner.ansi"
 exec pi \
   --model "${POC_CLERK_MODEL:-kimi-coding/k3:max}" \
   --no-skills --no-extensions --no-context-files --no-prompt-templates --no-themes \

@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+// pi-poc-racer — race-to-PoC orchestrator. General plans with you (tinder y/n),
+// then spawns pi workers, kills over-budget ones, splits, redispatches. YOLO.
+import { spawn } from "node:child_process";
+import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { createInterface } from "node:readline";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = dirname(fileURLToPath(import.meta.url));
+const CWD = process.cwd();
+const STATE = join(CWD, ".racer");
+mkdirSync(join(STATE, "logs"), { recursive: true });
+
+const TOKEN_CEILING = +(process.env.POC_TOKEN_CEILING || 100_000);
+const SILENCE_MS = +(process.env.POC_SILENCE_MS || 180_000);
+const MODEL = process.env.POC_MODEL_ARGS || ""; // e.g. "--provider kimi-coding --model k3"
+
+const skillArgs = ["ponytail", "caveman", "adhd"].flatMap(s => [
+  "--append-system-prompt", join(ROOT, "skills", `${s}.md`),
+]);
+
+const sh = (args, input) => new Promise((res, rej) => {
+  const p = spawn("pi", ["-p", "--provider", "kimi-coding", "--model", "k3", ...args], { cwd: CWD });
+  let out = "";
+  p.stdout.on("data", d => (out += d));
+  p.on("close", c => (c === 0 ? res(out) : rej(new Error(`pi exited ${c}: ${out.slice(-300)}`))));
+  if (input) p.stdin.write(input);
+  p.stdin.end();
+});
+
+const prompt = (f, extra) => sh(["--append-system-prompt", join(ROOT, "prompts", f), "--"], [extra]);
+const jsonBlock = s => JSON.parse(s.match(/```json\s*([\s\S]*?)```/)?.[1] || s.match(/\[[\s\S]*\]|\{[\s\S]*\}/)?.[0]);
+
+const rl = createInterface({ input: process.stdin, output: process.stdout });
+const ask = q => new Promise(r => rl.question(q, r));
+
+async function plan(goal) {
+  console.log(`\n🃏 TINDER PLANNING — y / n / ? + free text\n`);
+  const qs = jsonBlock(await prompt("plan-questions.md", goal));
+  const answers = [];
+  for (const q of qs) {
+    const a = (await ask(`  ${q}  [y/n/?] `)).trim();
+    if (a.startsWith("?")) answers.push({ q, a: await ask("     clarify: ") });
+    else answers.push({ q, a: a.toLowerCase().startsWith("y") ? "y" : "n" });
+  }
+  const planMd = await prompt("plan-final.md", `GOAL: ${goal}\nANSWERS: ${JSON.stringify(answers)}`);
+  writeFileSync(join(STATE, "PLAN.md"), planMd);
+  console.log(`\n${planMd}\n`);
+  return (await ask(`PLAN OK? [y/n] `)).trim().toLowerCase().startsWith("y");
+}
+
+const incident = (task, reason, note) => {
+  appendFileSync(join(STATE, "INCIDENTS.md"),
+    `\n## ${new Date().toISOString()} ${task.id} — ${reason}\n- task: ${task.title}\n- est: ${task.estTokens}\n- note: ${note}\n- lesson: split smaller next plan\n`);
+  console.log(`💥 ${task.id} killed (${reason}) — incident logged, splitting`);
+};
+
+function meter(child, task) {
+  // ponytail: token field shape of `pi --mode json` not fixed; we grep any
+  // totalTokens-ish key. Silence timer is the always-on guard regardless.
+  let tokens = 0, lastOut = Date.now(), tail = "";
+  child.stdout.on("data", d => {
+    lastOut = Date.now();
+    const s = d.toString();
+    tail = (tail + s).slice(-800);
+    for (const m of s.matchAll(/"totalTokens":(\d+)|"total_tokens":(\d+)/g))
+      tokens = Math.max(tokens, +(m[1] || m[2]));
+  });
+  return { tokens: () => tokens, silentFor: () => Date.now() - lastOut, tail: () => tail };
+}
+
+function runWorker(task) {
+  return new Promise(resolve => {
+    const args = ["-p", "--mode", "json", ...skillArgs, "--",
+      `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.`];
+    const child = spawn("pi", args, { cwd: CWD });
+    const m = meter(child, task);
+    const log = join(STATE, "logs", `${task.id}.jsonl`);
+    child.stdout.on("data", d => appendFileSync(log, d));
+    const tick = setInterval(() => {
+      if (m.tokens() > TOKEN_CEILING) return kill("token-ceiling");
+      if (m.silentFor() > SILENCE_MS) return kill("silence-timeout");
+    }, 5000);
+    const kill = reason => { clearInterval(tick); child.kill("SIGKILL"); resolve({ ok: false, reason, tail: m.tail() }); };
+    child.on("close", code => { clearInterval(tick); resolve({ ok: code === 0, reason: code === 0 ? null : "crash", tail: m.tail() }); });
+    console.log(`🏁 ${task.id} started: ${task.title}`);
+  });
+}
+
+async function race() {
+  const plan = jsonBlock(readFileSync(join(STATE, "PLAN.md"), "utf8"));
+  const tasks = new Map(plan.tasks.map(t => [t.id, { ...t, status: "pending" }]));
+  const running = new Set();
+  while ([...tasks.values()].some(t => t.status === "pending")) {
+    for (const t of tasks.values()) {
+      if (t.status !== "pending" || running.size >= (plan.maxParallel || 3)) continue;
+      if (t.dependsOn?.some(d => tasks.get(d)?.status !== "done")) continue;
+      t.status = "running"; running.add(t.id);
+      runWorker(t).then(async r => {
+        running.delete(t.id);
+        if (r.ok) { t.status = "done"; console.log(`✅ ${t.id} done`); return; }
+        incident(t, r.reason, r.tail.slice(-200).replace(/\n/g, " "));
+        const split = jsonBlock(await prompt("split.md",
+          `TASK: ${JSON.stringify(t)}\nREASON: ${r.reason}\nLAST OUTPUT: ${r.tail.slice(-500)}`));
+        t.status = "split";
+        for (const nt of split) tasks.set(nt.id, { ...nt, status: "pending",
+          dependsOn: (nt.dependsOn || []).map(d => (d === t.id ? null : d)).filter(Boolean)
+            .concat(t.dependsOn?.filter(d => tasks.get(d)?.status !== "done") || []) });
+      });
+    }
+    await new Promise(r => setTimeout(r, 2000));
+    if (!running.size && ![...tasks.values()].some(t => t.status === "pending")) break;
+  }
+  console.log(`\n🏆 READY TO TEST. Logs: .racer/logs/ Incidents: .racer/INCIDENTS.md`);
+  rl.close();
+}
+
+const [cmd, ...rest] = process.argv.slice(2);
+if (cmd === "plan") (await plan(rest.join(" "))) && console.log("run: pi-poc-racer run"), rl.close();
+else if (cmd === "run") await race();
+else if (cmd) { if (await plan([cmd, ...rest].join(" "))) await race(); else rl.close(); }
+else console.log("usage: pi-poc-racer \"<goal>\" | plan \"<goal>\" | run");

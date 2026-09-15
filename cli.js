@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // pi-poc-racer — race-to-PoC orchestrator. General plans with you (tinder y/n),
 // then spawns pi workers, kills over-budget ones, splits, redispatches. YOLO.
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
@@ -14,11 +14,10 @@ mkdirSync(join(STATE, "logs"), { recursive: true });
 
 const TOKEN_CEILING = +(process.env.POC_TOKEN_CEILING || 100_000);
 const SILENCE_MS = +(process.env.POC_SILENCE_MS || 180_000);
-const MODEL = process.env.POC_MODEL_ARGS || ""; // e.g. "--provider kimi-coding --model k3"
 
-const skillArgs = ["ponytail", "caveman", "adhd"].flatMap(s => [
-  "--append-system-prompt", join(ROOT, "skills", `${s}.md`),
-]);
+const git = (...a) => { try { return execFileSync("git", a, { cwd: CWD, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch { return ""; } };
+const inGit = () => git("rev-parse", "--is-inside-work-tree") === "true";
+const commit = msg => { if (inGit() && git("status", "--porcelain")) { git("add", "-A"); git("commit", "-qm", msg); } };
 
 const sh = (args, input) => new Promise((res, rej) => {
   const p = spawn("pi", ["-p", "--provider", "kimi-coding", "--model", "k3", ...args], { cwd: CWD });
@@ -83,8 +82,8 @@ const writeStandings = tasks => writeFileSync(join(STATE, "standings.json"),
 
 function runWorker(task) {
   return new Promise(resolve => {
-    const args = ["-p", "--mode", "json", ...skillArgs, "--",
-      `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.`];
+    const args = ["-p", "--mode", "json", "--no-skills", "--no-extensions", "--no-context-files", "--",
+      `TASK ${task.id}: ${task.title}\nFILES YOU OWN: ${(task.files || []).join(", ")}\nDONE WHEN: ${task.doneWhen}\nRULES: touch only your files. Smallest change that works, delete over add, no new abstractions, no new dependencies. No questions, decide yourself, YOLO. End with one line: RESULT: <what works now + demo URL or CLI command>.`];
     const child = spawn("pi", args, { cwd: CWD });
     const m = meter(child, task);
     const log = join(STATE, "logs", `${task.id}.jsonl`);
@@ -110,7 +109,7 @@ async function race() {
       t.status = "running"; running.add(t.id); t.startedAt = Date.now(); writeStandings(tasks);
       runWorker(t).then(async r => {
         running.delete(t.id);
-        if (r.ok) { t.status = "done"; t.endedAt = Date.now(); console.log(`✅ ${t.id} done`); writeStandings(tasks); return; }
+        if (r.ok) { t.status = "done"; t.endedAt = Date.now(); commit(`racer(${t.id}): ${t.title}`); console.log(`✅ ${t.id} done`); writeStandings(tasks); return; }
         incident(t, r.reason, r.tail.slice(-200).replace(/\n/g, " "));
         const split = jsonBlock(await prompt("split.md",
           `TASK: ${JSON.stringify(t)}\nREASON: ${r.reason}\nLAST OUTPUT: ${r.tail.slice(-500)}`));
@@ -128,6 +127,7 @@ async function race() {
   const laps = [...tasks.values()].filter(t => t.status === "done")
     .map(t => `${t.id}: ${(((t.endedAt - t.startedAt) / 1000) | 0)}s`).join(" | ");
   console.log(`\n🏆 READY TO TEST. RACE TIME: ${(total / 60) | 0}m${total % 60}s. LAPS: ${laps}`);
+  if (inGit() && git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")) { git("push", "-q"); console.log("pushed to origin."); }
   console.log(`Logs: .racer/logs/ Incidents: .racer/INCIDENTS.md Standings: .racer/standings.json`);
   rl.close();
 }

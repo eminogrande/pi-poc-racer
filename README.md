@@ -66,13 +66,13 @@ State lives in `.racer/` of the project you run it in:
 | `POC_TOKEN_CEILING` | `100000` | kill a worker past this many total tokens |
 | `POC_SILENCE_MS` | `180000` | kill a worker silent this long |
 
-## Built-in skills
+## Clean-room TUI
 
-Every worker spawns with three system prompts appended, so machine-to-machine and human-to-machine throughput stays maximal:
+`poc` starts pi with `--no-skills --no-extensions --no-context-files --no-prompt-templates` and `quietStartup`: no startup dumps, no global config, no surprise context. The only system prompt is the Clerk. Workers run the same clean room — skill personas were measured and cut: ~6k tokens per worker spawn for zero behavioral gain. The two rules that survived live in the worker prompt itself: smallest change that works, no new dependencies.
 
-- **ponytail** — laziest solution that works, deletion over addition
-- **caveman** — ultra-compressed output, no filler tokens
-- **adhd** — action-first output shaped for fast human decisions
+## Commit policy
+
+The CLI commits after every finished task (`racer(t3): <title>`) and pushes exactly once: at `READY TO TEST`, and only if the branch has an upstream. Many commits, one push, zero noise mid-race.
 
 ## Rules of the race
 

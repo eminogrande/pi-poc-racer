@@ -1,11 +1,11 @@
 #!/bin/sh
-# poc — one command. Opens the pi-poc-racer TUI (pi + general persona + skills).
+# poc — one command. Opens the pi-poc-racer TUI (pi + Clerk of the Course, racer theme).
+# Clean room: no user skills/extensions/context files, quiet startup.
 DIR="$(cd "$(dirname "$0")" && pwd)"
+[ -f .pi/settings.json ] || { mkdir -p .pi && printf '{ "quietStartup": true }\n' > .pi/settings.json; }
 exec pi \
+  --no-skills --no-extensions --no-context-files --no-prompt-templates --no-themes \
   --theme "$DIR/themes/racer.json" \
   --use-theme racer \
   --append-system-prompt "$DIR/prompts/clerk.md" \
-  --append-system-prompt "$DIR/skills/ponytail.md" \
-  --append-system-prompt "$DIR/skills/caveman.md" \
-  --append-system-prompt "$DIR/skills/adhd.md" \
   "$@"

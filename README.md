@@ -2,7 +2,7 @@
 
 Race-to-proof-of-concept orchestrator for the [pi](https://github.com/earendil-works/pi-coding-agent) coding agent.
 
-You give it a goal. The **general** plans with you tinder-style — rapid yes/no questions, `?` when something needs clarification — then dispatches parallel **workers** (pi subprocesses), watches their token spend and output silence, **kills** anything that thinks too long, splits the task smaller, and redispatches. Unlimited rounds, zero questions mid-run, until the goal is ready to test.
+You give it a goal. The **Clerk of the Course** 🏁 plans with you tinder-style — rapid yes/no questions, `?` when something needs clarification — then dispatches parallel **workers** (pi subprocesses) onto the track, commentates live from `.racer/standings.json` (excitement rising toward the finish, podium with lap times at the end), **kills** anything that thinks too long, splits the task smaller, and redispatches. Unlimited rounds, zero questions mid-run, until the goal is ready to test.
 
 No tests get written. "Done" means: a demo you can click, or a CLI that prints the result/state.
 
@@ -55,6 +55,7 @@ State lives in `.racer/` of the project you run it in:
 | file | what |
 |---|---|
 | `.racer/PLAN.md` | the agreed plan |
+| `.racer/standings.json` | live race standings: task status, tokens, lap times |
 | `.racer/INCIDENTS.md` | kill log + lesson per kill |
 | `.racer/logs/<task>.jsonl` | raw worker output |
 

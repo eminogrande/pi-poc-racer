@@ -64,11 +64,22 @@ function meter(child, task) {
     lastOut = Date.now();
     const s = d.toString();
     tail = (tail + s).slice(-800);
+    task.tokens = tokens;
+    task.last = tail.replace(/\s+/g, " ").slice(-120);
     for (const m of s.matchAll(/"totalTokens":(\d+)|"total_tokens":(\d+)/g))
       tokens = Math.max(tokens, +(m[1] || m[2]));
   });
   return { tokens: () => tokens, silentFor: () => Date.now() - lastOut, tail: () => tail };
 }
+
+const raceStart = Date.now();
+const writeStandings = tasks => writeFileSync(join(STATE, "standings.json"),
+  JSON.stringify({ raceElapsedSec: ((Date.now() - raceStart) / 1000) | 0,
+    done: [...tasks.values()].filter(t => t.status === "done").length,
+    total: tasks.size,
+    tasks: Object.fromEntries([...tasks.values()].map(t => [t.id,
+      { title: t.title, status: t.status, tokens: t.tokens || 0, last: t.last || "",
+        lapSec: t.startedAt ? (((t.endedAt || Date.now()) - t.startedAt) / 1000) | 0 : 0 }])) }, null, 1));
 
 function runWorker(task) {
   return new Promise(resolve => {
@@ -96,10 +107,10 @@ async function race() {
     for (const t of tasks.values()) {
       if (t.status !== "pending" || running.size >= (plan.maxParallel || 3)) continue;
       if (t.dependsOn?.some(d => tasks.get(d)?.status !== "done")) continue;
-      t.status = "running"; running.add(t.id);
+      t.status = "running"; running.add(t.id); t.startedAt = Date.now(); writeStandings(tasks);
       runWorker(t).then(async r => {
         running.delete(t.id);
-        if (r.ok) { t.status = "done"; console.log(`✅ ${t.id} done`); return; }
+        if (r.ok) { t.status = "done"; t.endedAt = Date.now(); console.log(`✅ ${t.id} done`); writeStandings(tasks); return; }
         incident(t, r.reason, r.tail.slice(-200).replace(/\n/g, " "));
         const split = jsonBlock(await prompt("split.md",
           `TASK: ${JSON.stringify(t)}\nREASON: ${r.reason}\nLAST OUTPUT: ${r.tail.slice(-500)}`));
@@ -110,9 +121,14 @@ async function race() {
       });
     }
     await new Promise(r => setTimeout(r, 2000));
+    writeStandings(tasks);
     if (!running.size && ![...tasks.values()].some(t => t.status === "pending")) break;
   }
-  console.log(`\n🏆 READY TO TEST. Logs: .racer/logs/ Incidents: .racer/INCIDENTS.md`);
+  const total = ((Date.now() - raceStart) / 1000) | 0;
+  const laps = [...tasks.values()].filter(t => t.status === "done")
+    .map(t => `${t.id}: ${(((t.endedAt - t.startedAt) / 1000) | 0)}s`).join(" | ");
+  console.log(`\n🏆 READY TO TEST. RACE TIME: ${(total / 60) | 0}m${total % 60}s. LAPS: ${laps}`);
+  console.log(`Logs: .racer/logs/ Incidents: .racer/INCIDENTS.md Standings: .racer/standings.json`);
   rl.close();
 }
 

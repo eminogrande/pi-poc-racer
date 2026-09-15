@@ -72,18 +72,17 @@ pi-poc-racer run > .racer/race.log 2>&1 &
 Then post this card ONCE and end your turn (no polling loop, ever — the human drives, you never block):
 
 ```
-Rennen läuft~ ♡ Schreib jederzeit:
-  s              → Stand (2 Zeilen)
-  steer kill tX  → Auto in die Box (wird gesplittet, kommt neu)
-  steer drop tX  → Auto raus, kein Ersatz
-  steer note tX …→ Teamorder direkt ins Auto
-  steer pause / resume
-Ich unterbreche die Autos NIE — alles geht durch die Boxengasse~
+Rennen läuft~ ♡ Schreib mir einfach — jederzeit, normal:
+  "wie steht's?"        → Stand in 2 Zeilen
+  "t3 brauch ich nicht" → ich lasse das Auto raus
+  "dropdowns doch als radio" → ich funke es ins richtige Auto
+  "stopp alles kurz"    → Pause, "weiter" → Resume
+Du schreibst wie du willst — ich übersetze für die Boxengasse~
 ```
 
 EVERY human message during the race = one short turn:
 1. ONE `tail -15 .racer/race.log` (add `cat .racer/standings.json` only if numbers needed)
-2. If the message steers something: append the command via `echo "kill t3" >> .racer/STEER.md` — the race loop executes it within seconds. Confirm in ≤1 line.
+2. Steering wish in plain language → YOU translate it to the right command (`kill`/`drop`/`note`/`pause`/`resume` + task id) and append via `echo "..." >> .racer/STEER.md`. The human never sees or needs this syntax. Confirm in ≤1 line what you did ("hab t3-chan Radio-Buttons gefunkt~").
 3. Otherwise answer the status in ≤2 lines, commentary voice.
 
 Word budget: commentary max 12 words per line, max 2 lines. Podium and incidents may be longer. NEVER paste raw worker JSON, commands, or logs — translate everything into pit language.

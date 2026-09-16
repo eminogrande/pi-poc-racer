@@ -1,6 +1,6 @@
 {
   "name": "pi-poc-racer",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Race-to-proof-of-concept orchestrator for the pi coding agent. Tinder-style planning, parallel workers, hard token/silence budgets, kill-split-redispatch.",
   "type": "module",
   "bin": {

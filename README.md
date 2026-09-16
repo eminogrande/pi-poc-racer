@@ -80,7 +80,7 @@ The Clerk never polls and never blocks: every message you type is answered in â‰
 | `POC_SILENCE_MS` | `180000` | kill a worker silent this long |
 | `POC_PI_MODEL` | `kimi-coding/k3` | model for workers + planner calls |
 | `POC_WORKER_THINKING` | `low` | thinking level for workers (`off`/`minimal`/`low`/`medium`/`high`) |
-| `POC_CLERK_MODEL` | `kimi-coding/k3:max` | model + thinking for the Clerk TUI |
+| `POC_CLERK_MODEL` | `kimi-coding/k3:medium` | model + thinking for the Clerk TUI |
 
 ## Clean-room TUI
 

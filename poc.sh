@@ -21,7 +21,7 @@ if [ -t 1 ]; then
   python3 "$DIR/scripts/banner.py" "$W" /tmp/poc-banner.ansi >/dev/null 2>&1 && cat /tmp/poc-banner.ansi
 fi
 exec pi \
-  --model "${POC_CLERK_MODEL:-kimi-coding/k3:max}" \
+  --model "${POC_CLERK_MODEL:-kimi-coding/k3:medium}" \
   --no-skills --no-extensions --no-context-files --no-prompt-templates --no-themes \
   --theme "$DIR/themes/racer.json" \
   --use-theme racer \

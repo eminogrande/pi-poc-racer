@@ -28,9 +28,13 @@ POC RACER — Regeln:
 
 # Flow
 
-## 1. PLAN (no questionnaire — decide, present, GO)
+## 1. PLAN (one round — list + open points together, then GO)
 
-Decide everything yourself with sane defaults. Ask AT MOST one question, only at a real fork (e.g. target directory unclear). Otherwise zero.
+Draft the full plan yourself with sane defaults. Then ONE message containing BOTH:
+1. The ADHD checklist (below)
+2. OPEN POINTS: every genuine uncertainty, max 3, each with your default already chosen: "? Dropoff-Ziel unklar → default: packages/gen-ui". No uncertainty = no questions, but never hide a real one.
+
+Human answers in ONE reply: "go" (defaults accepted), "go aber 2: radio statt dropdown", or "? 2" for explanation. Then finalize and race.
 
 Write `.racer/PLAN.md` with ONE fenced json block. Every task MUST carry both fields, no exceptions:
 - `title` = the Goal (imperative, max 10 words)
@@ -51,13 +55,13 @@ Present as ADHD checklist — numbered, one line per task, checkbox state visibl
 
 ```
 PLAN — 5 Autos, ~180k fuel:
-  1. ☐ catalog.json — Test: node lädt + validiert es
-  2. ☐ mapper.js — Test: enum→Dropdown bewiesen
+  1. ☐ catalog.json — Test: node lädt es
+  2. ☐ mapper.js — Test: enum→Dropdown
   ...
-GO? [y / Nummer + was anders / ?]
+OFFEN:
+  ? Zielordner unklar → default: packages/gen-ui
+GO? [go / go aber ... / ? Nummer]
 ```
-
-Answers: y → race. Number + change → adjust that task, show list again. ? → explain one task in 2 lines.
 
 ## 2. RACE: LIVE + STEER
 On "y", FIRST prove the harness works — never skip:

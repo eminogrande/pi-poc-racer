@@ -1,9 +1,8 @@
 #!/usr/bin/env node
-// pi-poc-racer — race-to-PoC orchestrator. General plans with you (tinder y/n),
-// then spawns pi workers, kills over-budget ones, splits, redispatches. YOLO.
+// pi-poc-racer — race-to-PoC orchestrator. Clerk (TUI) plans with you,
+// then this CLI dispatches workers, kills over-budget ones, splits, redispatches. YOLO.
 import { spawn, execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, appendFileSync, mkdirSync, existsSync, statSync } from "node:fs";
-import { createInterface } from "node:readline";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -60,24 +59,6 @@ const sh = (args, input) => new Promise((res, rej) => {
 
 const prompt = (f, extra) => sh(["--append-system-prompt", join(ROOT, "prompts", f), "--"], String(extra ?? ""));
 const jsonBlock = s => JSON.parse(s.match(/```json\s*([\s\S]*?)```/)?.[1] || s.match(/\[[\s\S]*\]|\{[\s\S]*\}/)?.[0]);
-
-const rl = createInterface({ input: process.stdin, output: process.stdout });
-const ask = q => new Promise(r => rl.question(q, r));
-
-async function plan(goal) {
-  console.log(`\n🃏 TINDER PLANNING — y / n / ? + free text\n`);
-  const qs = jsonBlock(await prompt("plan-questions.md", goal));
-  const answers = [];
-  for (const q of qs) {
-    const a = (await ask(`  ${q}  [y/n/?] `)).trim();
-    if (a.startsWith("?")) answers.push({ q, a: await ask("     clarify: ") });
-    else answers.push({ q, a: a.toLowerCase().startsWith("y") ? "y" : "n" });
-  }
-  const planMd = await prompt("plan-final.md", `GOAL: ${goal}\nANSWERS: ${JSON.stringify(answers)}`);
-  writeFileSync(join(STATE, "PLAN.md"), planMd);
-  console.log(`\n${planMd}\n`);
-  return (await ask(`PLAN OK? [y/n] `)).trim().toLowerCase().startsWith("y");
-}
 
 const incident = (task, reason, note) => {
   appendFileSync(join(STATE, "INCIDENTS.md"),
@@ -189,7 +170,6 @@ async function race() {
   console.log(`\n🏆 READY TO TEST. RACE TIME: ${(total / 60) | 0}m${total % 60}s. LAPS: ${laps}`);
   deliver();
   console.log(`Logs: .racer/logs/ Incidents: .racer/INCIDENTS.md Standings: .racer/standings.json`);
-  rl.close();
 }
 
 async function smoke() {
@@ -202,9 +182,7 @@ async function smoke() {
   process.exit(1);
 }
 
-const [cmd, ...rest] = process.argv.slice(2);
-if (cmd === "plan") (await plan(rest.join(" "))) && console.log("run: pi-poc-racer run"), rl.close();
-else if (cmd === "smoke") await smoke();
+const [cmd] = process.argv.slice(2);
+if (cmd === "smoke") await smoke();
 else if (cmd === "run") await race();
-else if (cmd) { if (await plan([cmd, ...rest].join(" "))) await race(); else rl.close(); }
-else console.log("usage: pi-poc-racer \"<goal>\" | plan \"<goal>\" | run | smoke");
+else console.log("usage: pi-poc-racer run | smoke   (PLAN.md schreibt die Clerk im poc-TUI)");

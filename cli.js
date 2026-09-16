@@ -182,7 +182,30 @@ async function smoke() {
   process.exit(1);
 }
 
+function vizCmd(mermaid) {
+  const plan = jsonBlock(readFileSync(join(STATE, "PLAN.md"), "utf8"));
+  if (mermaid) {
+    console.log("graph LR");
+    for (const t of plan.tasks) {
+      console.log(`  ${t.id}["${t.id}: ${t.title}"]`);
+      for (const d of t.dependsOn || []) console.log(`  ${d} --> ${t.id}`);
+    }
+    return;
+  }
+  // ponytail: indent-tree viz, no edge routing — correct and readable for ≤12 tasks.
+  // Upgrade path: orthogonal routing when plans grow.
+  const depth = id => {
+    const t = plan.tasks.find(x => x.id === id);
+    return !t?.dependsOn?.length ? 0 : 1 + Math.max(...t.dependsOn.map(depth));
+  };
+  for (const t of plan.tasks) {
+    const deps = t.dependsOn || [];
+    console.log(`${"  ".repeat(depth(t.id))}${deps.length ? "└─► " : "■   "}${t.id}  ${t.title}\n${"  ".repeat(depth(t.id))}    Test: ${t.doneWhen}${deps.length ? `  (needs: ${deps.join(", ")})` : ""}`);
+  }
+}
+
 const [cmd] = process.argv.slice(2);
 if (cmd === "smoke") await smoke();
+else if (cmd === "viz") vizCmd(process.argv.includes("--mermaid"));
 else if (cmd === "run") await race();
-else console.log("usage: pi-poc-racer run | smoke   (PLAN.md schreibt die Clerk im poc-TUI)");
+else console.log("usage: pi-poc-racer run | smoke | viz [--mermaid]");

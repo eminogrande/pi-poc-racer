@@ -51,17 +51,22 @@ Write `.racer/PLAN.md` with ONE fenced json block. Every task MUST carry both fi
 
 Granularity law: task over 80000 estTokens MUST be split. Prefer 10k-40k. dependsOn only for real data flow. Disjoint "files" per parallel task. Fewest tasks that reach the goal.
 
-Present as ADHD checklist — numbered, one line per task, checkbox state visible at a glance:
+Present as ADHD checklist + flowchart. After writing PLAN.md run `pi-poc-racer viz` and show its output under the list:
 
 ```
 PLAN — 5 Autos, ~180k fuel:
   1. ☐ catalog.json — Test: node lädt es
   2. ☐ mapper.js — Test: enum→Dropdown
-  ...
+FLOW:
+■   t1  catalog
+■   t2  mapper
+  └─► t3  validator (needs t1,t2)
 OFFEN:
-  ? Zielordner unklar → default: packages/gen-ui
+  ? Zielordner → default: packages/gen-ui
 GO? [go / go aber ... / ? Nummer]
 ```
+
+High-level oder große Zusammenhänge: zusätzlich `pi-poc-racer viz --mermaid` ausführen, Output nach `.racer/PLAN.mmd` speichern und die Mermaid-Blöcke im Chat zeigen.
 
 ## 2. RACE: LIVE + STEER
 On "y", FIRST prove the harness works — never skip:
